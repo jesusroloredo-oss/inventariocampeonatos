@@ -22,6 +22,10 @@
             align-items: center;
             box-shadow: 0 2px 4px rgba(0,0,0,0.1);
         }
+        .header-buttons {
+            display: flex;
+            gap: 10px;
+        }
         .container { padding: 1rem; padding-bottom: 2rem; }
         .box-card { 
             background: white; 
@@ -38,6 +42,7 @@
             display: flex; 
             justify-content: space-between; 
             align-items: center;
+            gap: 10px;
         }
         .item-list { 
             list-style: none; 
@@ -60,6 +65,7 @@
             cursor: pointer;
         }
         .item:last-child { border-bottom: none; }
+        
         .item input[type="checkbox"] {
             width: 22px;
             height: 22px;
@@ -75,6 +81,7 @@
             text-decoration: line-through;
             color: #999;
         }
+        
         .qty { 
             font-weight: bold; 
             color: #1e3a8a; 
@@ -92,29 +99,44 @@
             font-weight: 600; 
             cursor: pointer;
         }
-        .btn-reset {
-            background: #ef4444;
-            color: white;
+        
+        /* Botones de Cabecera */
+        .btn-header {
             border: none;
-            padding: 6px 12px;
+            padding: 8px 12px;
             border-radius: 6px;
             font-size: 0.9rem;
             font-weight: bold;
             cursor: pointer;
         }
+        .btn-reset { background: #ef4444; color: white; }
+        .btn-edit-mode { background: white; color: #1e3a8a; }
+
+        /* Controles de Edición */
+        .btn-del {
+            background: #ef4444; color: white; border: none; padding: 6px 10px; border-radius: 4px; margin-right: 10px; cursor: pointer; font-size: 0.8rem;
+        }
+        .btn-add-item {
+            display: block; width: 100%; padding: 10px; margin-top: 10px; border: 2px dashed #cbd5e1; background: transparent; color: #64748b; border-radius: 6px; font-weight: bold; cursor: pointer;
+        }
+        .btn-add-caja {
+            display: block; width: 100%; padding: 14px; margin-top: 20px; border: none; background: #3b82f6; color: white; border-radius: 8px; font-weight: bold; font-size: 1.1rem; cursor: pointer; box-shadow: 0 4px 6px rgba(59, 130, 246, 0.3);
+        }
     </style>
 </head>
 <body>
     <header>
-        <h1 style="margin: 0; font-size: 1.3rem;">📦 Inventario</h1>
-        <button id="btn-reset" class="btn-reset">Limpiar</button>
+        <h1 style="margin: 0; font-size: 1.2rem;">📦 Material</h1>
+        <div class="header-buttons">
+            <button id="btn-edit" class="btn-header btn-edit-mode">✏️ Editar</button>
+            <button id="btn-reset" class="btn-header btn-reset">Limpiar</button>
+        </div>
     </header>
-    <div class="container" id="app"></div>
+    <div class="container" id="app">Cargando datos...</div>
 
-    <!-- Usamos Type="module" para importar Firebase -->
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/10.4.0/firebase-app.js";
-        import { getDatabase, ref, set, onValue, update } from "https://www.gstatic.com/firebasejs/10.4.0/firebase-database.js";
+        import { getDatabase, ref, set, onValue } from "https://www.gstatic.com/firebasejs/10.4.0/firebase-database.js";
 
         // 🔴🔴 PEGA AQUÍ TU CONFIGURACIÓN DE FIREBASE 🔴🔴
         const firebaseConfig = {
@@ -132,129 +154,172 @@
         const appFirebase = initializeApp(firebaseConfig);
         const db = getDatabase(appFirebase);
 
-        const inventario = [
+        let inventario = [];
+        let estadoItems = {};
+        let isEditMode = false;
+        let cajasAbiertas = {}; // Para recordar qué cajas están desplegadas
+
+        // Material por defecto si la base de datos está vacía la primera vez
+        const inventarioDefault = [
             {
-                id: "c1",
-                nombre: "Caja 1: Pantallas y Control",
-                color: "#3b82f6",
-                items: [
-                    { id: "tv32", nombre: "Televisiones 32\"", qty: 4 }, 
-                    { id: "sop", nombre: "Soportes de mesa", qty: 4 },
-                    { id: "mesa_esp", nombre: "Cartelería Mesa Española", qty: 4 }
-                ]
-            },
-            {
-                id: "c2",
-                nombre: "Caja 2: Electricidad",
-                color: "#ef4444",
-                items: [
-                    { id: "reg6", nombre: "Regletas 6 tomas", qty: 8 }, 
-                    { id: "alarg5", nombre: "Alargadores 5m", qty: 4 }, 
-                    { id: "cinta", nombre: "Cinta americana", qty: 2 }
-                ]
-            },
-            {
-                id: "c3",
-                nombre: "Caja 3: Datos y Periféricos",
-                color: "#eab308",
-                items: [
-                    { id: "hdmi2", nombre: "Cables HDMI 2m", qty: 6 }, 
-                    { id: "eth", nombre: "Cables Ethernet", qty: 5 }, 
-                    { id: "rat", nombre: "Ratones inalámbricos", qty: 4 }
-                ]
+                id: "c1", nombre: "Caja 1: Pantallas y Control", color: "#3b82f6",
+                items: [{ id: "tv32", nombre: "Televisiones 32\"", qty: "4" }, { id: "sop", nombre: "Soportes de mesa", qty: "4" }]
             }
         ];
 
         const appDiv = document.getElementById('app');
+        const btnEdit = document.getElementById('btn-edit');
 
-        // Construcción de la interfaz
-        inventario.forEach(caja => {
-            const card = document.createElement('div');
-            card.className = 'box-card';
-            card.style.borderLeftColor = caja.color;
-            
-            const titleDiv = document.createElement('div');
-            titleDiv.className = 'box-title';
-            titleDiv.innerHTML = `<strong>${caja.nombre}</strong>`;
-            
-            const btnToggle = document.createElement('button');
-            btnToggle.className = 'btn-toggle';
-            btnToggle.innerText = 'Abrir';
-            
-            titleDiv.appendChild(btnToggle);
-            card.appendChild(titleDiv);
-
-            const lista = document.createElement('div');
-            lista.className = 'item-list';
-            lista.id = 'list-' + caja.id;
-
-            btnToggle.addEventListener('click', () => {
-                lista.classList.toggle('active');
-                if (lista.classList.contains('active')) {
-                    btnToggle.innerText = 'Cerrar';
-                    btnToggle.style.background = '#e0e7ff';
-                } else {
-                    btnToggle.innerText = 'Abrir';
-                    btnToggle.style.background = '#f4f4f9';
-                }
-            });
-
-            caja.items.forEach(item => {
-                const label = document.createElement('label');
-                label.className = 'item';
-                
-                const checkbox = document.createElement('input');
-                checkbox.type = 'checkbox';
-                checkbox.id = item.id;
-                
-                // EVENTO IMPORTANTE: Al marcar, se envía a Firebase
-                checkbox.addEventListener('change', (e) => {
-                    set(ref(db, 'inventario/' + item.id), e.target.checked);
-                });
-
-                const spanText = document.createElement('span');
-                spanText.className = 'item-text';
-                spanText.innerText = item.nombre;
-
-                const spanQty = document.createElement('span');
-                spanQty.className = 'qty';
-                spanQty.innerText = 'x' + item.qty;
-
-                label.appendChild(checkbox);
-                label.appendChild(spanText);
-                label.appendChild(spanQty);
-                lista.appendChild(label);
-            });
-
-            card.appendChild(lista);
-            appDiv.appendChild(card);
+        // Alternar Modo Edición
+        btnEdit.addEventListener('click', () => {
+            isEditMode = !isEditMode;
+            btnEdit.innerText = isEditMode ? '👁️ Ver Normal' : '✏️ Editar';
+            btnEdit.style.background = isEditMode ? '#eab308' : 'white';
+            btnEdit.style.color = isEditMode ? 'black' : '#1e3a8a';
+            renderDOM();
         });
 
-        // ESCUCHA EN TIEMPO REAL: Se actualiza solo al recibir datos de la nube
-        const inventarioRef = ref(db, 'inventario');
-        onValue(inventarioRef, (snapshot) => {
+        // 1. Escuchar la ESTRUCTURA del inventario
+        onValue(ref(db, 'estructura'), (snapshot) => {
             const data = snapshot.val();
             if (data) {
-                // Actualiza cada casilla basándose en lo que dice Firebase
-                Object.keys(data).forEach(itemId => {
-                    const cb = document.getElementById(itemId);
-                    if (cb) {
-                        cb.checked = data[itemId];
-                    }
-                });
+                // Aseguramos de que Firebase no elimine los arrays vacíos (comportamiento por defecto)
+                inventario = data.map(c => ({...c, items: c.items || []}));
+            } else {
+                inventario = inventarioDefault;
+                set(ref(db, 'estructura'), inventario); // Guardar por primera vez
+            }
+            renderDOM();
+        });
+
+        // 2. Escuchar el ESTADO de los checkboxes
+        onValue(ref(db, 'estado'), (snapshot) => {
+            estadoItems = snapshot.val() || {};
+            // Desmarcamos todos los checks visuales
+            document.querySelectorAll('input[type="checkbox"]').forEach(cb => cb.checked = false);
+            // Marcamos solo los que vengan como true desde Firebase
+            Object.keys(estadoItems).forEach(itemId => {
+                const cb = document.getElementById('cb-' + itemId);
+                if (cb) cb.checked = estadoItems[itemId];
+            });
+        });
+
+        // --- FUNCIONES GLOBALES PARA EL HTML ---
+        
+        window.toggleItems = function(id) {
+            cajasAbiertas[id] = !cajasAbiertas[id];
+            renderDOM();
+        };
+
+        window.guardarCheckbox = function(itemId, checked) {
+            set(ref(db, 'estado/' + itemId), checked ? true : null);
+        };
+
+        document.getElementById('btn-reset').addEventListener('click', () => {
+            if(confirm('¿Seguro que quieres desmarcar todo el material en TODOS los dispositivos?')) {
+                set(ref(db, 'estado'), null); // Borra todos los checks de la base de datos
             }
         });
 
-        // Botón limpiar (pone todo a false en la base de datos)
-        document.getElementById('btn-reset').addEventListener('click', () => {
-            if(confirm('¿Seguro que quieres desmarcar todo el material en TODOS los dispositivos?')) {
-                const updates = {};
-                document.querySelectorAll('input[type="checkbox"]').forEach(cb => {
-                    updates[cb.id] = false;
-                });
-                update(ref(db, 'inventario'), updates);
+        window.addCaja = function() {
+            const nombre = prompt('Nombre de la nueva caja (Ej: Caja 4: Herramientas):');
+            if(!nombre) return;
+            // Color aleatorio para la etiqueta
+            const color = '#' + Math.floor(Math.random()*16777215).toString(16).padStart(6, '0');
+            const nuevaCaja = { id: 'c' + Date.now(), nombre: nombre, color: color, items: [] };
+            inventario.push(nuevaCaja);
+            cajasAbiertas[nuevaCaja.id] = true;
+            set(ref(db, 'estructura'), inventario);
+        };
+
+        window.borrarCaja = function(cajaId) {
+            if(confirm('¿Borrar caja y todo su contenido?')) {
+                inventario = inventario.filter(c => c.id !== cajaId);
+                set(ref(db, 'estructura'), inventario);
             }
-        });
+        };
+
+        window.addItem = function(cajaId) {
+            const nombre = prompt('Nombre del material (Ej: Cinta Americana):');
+            if(!nombre) return;
+            const qty = prompt('Cantidad total que debe haber:', '1');
+            if(!qty) return;
+
+            const caja = inventario.find(c => c.id === cajaId);
+            caja.items.push({ id: 'i' + Date.now(), nombre: nombre, qty: qty });
+            set(ref(db, 'estructura'), inventario);
+        };
+
+        window.borrarItem = function(cajaId, itemId) {
+            if(confirm('¿Borrar este material del inventario?')) {
+                const caja = inventario.find(c => c.id === cajaId);
+                caja.items = caja.items.filter(i => i.id !== itemId);
+                set(ref(db, 'estructura'), inventario);
+            }
+        };
+
+        // --- RENDERIZADO DE LA INTERFAZ ---
+        function renderDOM() {
+            appDiv.innerHTML = '';
+            
+            inventario.forEach(caja => {
+                const card = document.createElement('div');
+                card.className = 'box-card';
+                card.style.borderLeftColor = caja.color;
+
+                const isOpen = cajasAbiertas[caja.id] ? 'active' : '';
+                const btnText = cajasAbiertas[caja.id] ? 'Cerrar' : 'Abrir';
+                const btnStyle = cajasAbiertas[caja.id] ? 'background: #e0e7ff;' : 'background: #f4f4f9;';
+
+                let itemsHTML = '';
+                caja.items.forEach(item => {
+                    const isChecked = estadoItems[item.id] ? 'checked' : '';
+                    if (isEditMode) {
+                        itemsHTML += `
+                        <div class="item">
+                            <button class="btn-del" onclick="borrarItem('${caja.id}', '${item.id}')">🗑️</button>
+                            <span class="item-text">${item.nombre}</span>
+                            <span class="qty">x${item.qty}</span>
+                        </div>`;
+                    } else {
+                        itemsHTML += `
+                        <label class="item">
+                            <input type="checkbox" id="cb-${item.id}" ${isChecked} onchange="guardarCheckbox('${item.id}', this.checked)">
+                            <span class="item-text">${item.nombre}</span>
+                            <span class="qty">x${item.qty}</span>
+                        </label>`;
+                    }
+                });
+
+                if (isEditMode) {
+                    itemsHTML += `<button class="btn-add-item" onclick="addItem('${caja.id}')">+ Añadir material a esta caja</button>`;
+                }
+
+                let cajaTitleHTML = `<strong style="flex-grow:1;">${caja.nombre}</strong>`;
+                if(isEditMode) {
+                    cajaTitleHTML = `<button class="btn-del" onclick="borrarCaja('${caja.id}')">🗑️ Borrar Caja</button> <strong style="flex-grow:1;">${caja.nombre}</strong>`;
+                }
+
+                card.innerHTML = `
+                    <div class="box-title">
+                        ${cajaTitleHTML}
+                        <button class="btn-toggle" style="${btnStyle}" onclick="toggleItems('${caja.id}')">${btnText}</button>
+                    </div>
+                    <div class="item-list ${isOpen}" id="list-${caja.id}">
+                        ${itemsHTML}
+                    </div>
+                `;
+                appDiv.appendChild(card);
+            });
+
+            if (isEditMode) {
+                const btnAddCaja = document.createElement('button');
+                btnAddCaja.className = 'btn-add-caja';
+                btnAddCaja.innerText = '+ Añadir Nueva Caja';
+                btnAddCaja.onclick = addCaja;
+                appDiv.appendChild(btnAddCaja);
+            }
+        }
     </script>
 </body>
 </html>
