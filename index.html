@@ -1,0 +1,223 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Inventario Campeonatos</title>
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <style>
+        body { 
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; 
+            background-color: #f4f4f9; 
+            margin: 0; 
+            padding: 0; 
+        }
+        header { 
+            background-color: #1e3a8a; 
+            color: white; 
+            padding: 1rem; 
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .container { padding: 1rem; padding-bottom: 2rem; }
+        .box-card { 
+            background: white; 
+            border-left: 6px solid #1e3a8a;
+            border-radius: 8px; 
+            padding: 1rem; 
+            margin-bottom: 1rem; 
+            box-shadow: 0 2px 5px rgba(0,0,0,0.05); 
+        }
+        .box-title { 
+            margin: 0; 
+            font-size: 1.2rem; 
+            color: #333; 
+            display: flex; 
+            justify-content: space-between; 
+            align-items: center;
+        }
+        .item-list { 
+            list-style: none; 
+            padding: 0; 
+            margin: 0; 
+            display: none; 
+        }
+        .item-list.active { 
+            display: block; 
+            border-top: 1px solid #eee; 
+            margin-top: 12px;
+            padding-top: 12px; 
+        }
+        .item { 
+            display: flex; 
+            align-items: center; 
+            padding: 12px 0; 
+            border-bottom: 1px solid #f9f9f9; 
+            color: #555;
+            cursor: pointer;
+        }
+        .item:last-child { border-bottom: none; }
+        
+        /* Estilos para el Checkbox personalizado */
+        .item input[type="checkbox"] {
+            width: 22px;
+            height: 22px;
+            margin-right: 15px;
+            accent-color: #1e3a8a;
+            cursor: pointer;
+        }
+        .item-text {
+            flex-grow: 1;
+            transition: all 0.2s;
+        }
+        /* Estilo cuando está marcado */
+        .item input[type="checkbox"]:checked + .item-text {
+            text-decoration: line-through;
+            color: #999;
+        }
+        
+        .qty { 
+            font-weight: bold; 
+            color: #1e3a8a; 
+            background: #e0e7ff; 
+            padding: 3px 10px; 
+            border-radius: 12px;
+            font-size: 0.9rem;
+        }
+        .btn-toggle { 
+            background: #f4f4f9; 
+            border: 1px solid #ddd; 
+            padding: 8px 14px; 
+            border-radius: 6px; 
+            color: #333; 
+            font-weight: 600; 
+            cursor: pointer;
+        }
+        .btn-reset {
+            background: #ef4444;
+            color: white;
+            border: none;
+            padding: 6px 12px;
+            border-radius: 6px;
+            font-size: 0.9rem;
+            font-weight: bold;
+            cursor: pointer;
+        }
+    </style>
+</head>
+<body>
+    <header>
+        <h1 style="margin: 0; font-size: 1.3rem;">📦 Inventario</h1>
+        <button class="btn-reset" onclick="resetearInventario()">Limpiar</button>
+    </header>
+    <div class="container" id="app">
+        <!-- El contenido se genera con JavaScript -->
+    </div>
+
+    <script>
+        // Configuración de material con IDs únicos para cada ítem
+        const inventario = [
+            {
+                id: "c1",
+                nombre: "Caja 1: Pantallas y Control",
+                color: "#3b82f6", // Azul
+                items: [
+                    { id: "tv32", nombre: "Televisiones 32\"", qty: 4 }, 
+                    { id: "sop", nombre: "Soportes de mesa", qty: 4 },
+                    { id: "mesa_esp", nombre: "Cartelería Mesa Española", qty: 4 }
+                ]
+            },
+            {
+                id: "c2",
+                nombre: "Caja 2: Electricidad",
+                color: "#ef4444", // Rojo
+                items: [
+                    { id: "reg6", nombre: "Regletas 6 tomas", qty: 8 }, 
+                    { id: "alarg5", nombre: "Alargadores 5m", qty: 4 }, 
+                    { id: "cinta", nombre: "Cinta americana", qty: 2 }
+                ]
+            },
+            {
+                id: "c3",
+                nombre: "Caja 3: Datos y Periféricos",
+                color: "#eab308", // Amarillo
+                items: [
+                    { id: "hdmi2", nombre: "Cables HDMI 2m", qty: 6 }, 
+                    { id: "eth", nombre: "Cables Ethernet", qty: 5 }, 
+                    { id: "rat", nombre: "Ratones inalámbricos", qty: 4 }
+                ]
+            }
+        ];
+
+        const app = document.getElementById('app');
+
+        // Renderizar la interfaz
+        inventario.forEach(caja => {
+            const card = document.createElement('div');
+            card.className = 'box-card';
+            card.style.borderLeftColor = caja.color;
+            
+            let itemsHTML = '';
+            caja.items.forEach(item => {
+                // Comprobar en localStorage si el ítem estaba marcado
+                const isChecked = localStorage.getItem(item.id) === 'true' ? 'checked' : '';
+                
+                itemsHTML += `
+                    <label class="item">
+                        <input type="checkbox" id="${item.id}" ${isChecked} onchange="guardarEstado('${item.id}')">
+                        <span class="item-text">${item.nombre}</span>
+                        <span class="qty">x${item.qty}</span>
+                    </label>
+                `;
+            });
+
+            card.innerHTML = `
+                <div class="box-title">
+                    <strong>${caja.nombre}</strong>
+                    <button class="btn-toggle" onclick="toggleItems('${caja.id}')">Abrir</button>
+                </div>
+                <div class="item-list" id="list-${caja.id}">
+                    ${itemsHTML}
+                </div>
+            `;
+            app.appendChild(card);
+        });
+
+        // Función para expandir/contraer
+        function toggleItems(id) {
+            const lista = document.getElementById('list-' + id);
+            const boton = lista.previousElementSibling.querySelector('.btn-toggle');
+            
+            lista.classList.toggle('active');
+            
+            if (lista.classList.contains('active')) {
+                boton.innerText = 'Cerrar';
+                boton.style.background = '#e0e7ff';
+            } else {
+                boton.innerText = 'Abrir';
+                boton.style.background = '#f4f4f9';
+            }
+        }
+
+        // Función para guardar el estado del checkbox en la memoria del navegador
+        function guardarEstado(itemId) {
+            const checkbox = document.getElementById(itemId);
+            localStorage.setItem(itemId, checkbox.checked);
+        }
+
+        // Función para desmarcar todo al empezar o terminar un evento
+        function resetearInventario() {
+            if(confirm('¿Seguro que quieres desmarcar todo el material?')) {
+                const checkboxes = document.querySelectorAll('input[type="checkbox"]');
+                checkboxes.forEach(cb => {
+                    cb.checked = false;
+                    localStorage.setItem(cb.id, 'false');
+                });
+            }
+        }
+    </script>
+</body>
+</html>
