@@ -60,8 +60,6 @@
             cursor: pointer;
         }
         .item:last-child { border-bottom: none; }
-        
-        /* Estilos para el Checkbox personalizado */
         .item input[type="checkbox"] {
             width: 22px;
             height: 22px;
@@ -73,12 +71,10 @@
             flex-grow: 1;
             transition: all 0.2s;
         }
-        /* Estilo cuando está marcado */
         .item input[type="checkbox"]:checked + .item-text {
             text-decoration: line-through;
             color: #999;
         }
-        
         .qty { 
             font-weight: bold; 
             color: #1e3a8a; 
@@ -111,19 +107,35 @@
 <body>
     <header>
         <h1 style="margin: 0; font-size: 1.3rem;">📦 Inventario</h1>
-        <button class="btn-reset" onclick="resetearInventario()">Limpiar</button>
+        <button id="btn-reset" class="btn-reset">Limpiar</button>
     </header>
-    <div class="container" id="app">
-        <!-- El contenido se genera con JavaScript -->
-    </div>
+    <div class="container" id="app"></div>
 
-    <script>
-        // Configuración de material con IDs únicos para cada ítem
+    <!-- Usamos Type="module" para importar Firebase -->
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/10.4.0/firebase-app.js";
+        import { getDatabase, ref, set, onValue, update } from "https://www.gstatic.com/firebasejs/10.4.0/firebase-database.js";
+
+        // 🔴🔴 PEGA AQUÍ TU CONFIGURACIÓN DE FIREBASE 🔴🔴
+        const firebaseConfig = {
+            apiKey: "TU_API_KEY",
+            authDomain: "tu-proyecto.firebaseapp.com",
+            databaseURL: "https://tu-proyecto-default-rtdb.europe-west1.firebasedatabase.app",
+            projectId: "tu-proyecto",
+            storageBucket: "tu-proyecto.appspot.com",
+            messagingSenderId: "TU_SENDER",
+            appId: "TU_APP_ID"
+        };
+        // 🔴🔴 ======================================= 🔴🔴
+
+        const appFirebase = initializeApp(firebaseConfig);
+        const db = getDatabase(appFirebase);
+
         const inventario = [
             {
                 id: "c1",
                 nombre: "Caja 1: Pantallas y Control",
-                color: "#3b82f6", // Azul
+                color: "#3b82f6",
                 items: [
                     { id: "tv32", nombre: "Televisiones 32\"", qty: 4 }, 
                     { id: "sop", nombre: "Soportes de mesa", qty: 4 },
@@ -133,7 +145,7 @@
             {
                 id: "c2",
                 nombre: "Caja 2: Electricidad",
-                color: "#ef4444", // Rojo
+                color: "#ef4444",
                 items: [
                     { id: "reg6", nombre: "Regletas 6 tomas", qty: 8 }, 
                     { id: "alarg5", nombre: "Alargadores 5m", qty: 4 }, 
@@ -143,7 +155,7 @@
             {
                 id: "c3",
                 nombre: "Caja 3: Datos y Periféricos",
-                color: "#eab308", // Amarillo
+                color: "#eab308",
                 items: [
                     { id: "hdmi2", nombre: "Cables HDMI 2m", qty: 6 }, 
                     { id: "eth", nombre: "Cables Ethernet", qty: 5 }, 
@@ -152,72 +164,96 @@
             }
         ];
 
-        const app = document.getElementById('app');
+        const appDiv = document.getElementById('app');
 
-        // Renderizar la interfaz
+        // Construcción de la interfaz
         inventario.forEach(caja => {
             const card = document.createElement('div');
             card.className = 'box-card';
             card.style.borderLeftColor = caja.color;
             
-            let itemsHTML = '';
-            caja.items.forEach(item => {
-                // Comprobar en localStorage si el ítem estaba marcado
-                const isChecked = localStorage.getItem(item.id) === 'true' ? 'checked' : '';
-                
-                itemsHTML += `
-                    <label class="item">
-                        <input type="checkbox" id="${item.id}" ${isChecked} onchange="guardarEstado('${item.id}')">
-                        <span class="item-text">${item.nombre}</span>
-                        <span class="qty">x${item.qty}</span>
-                    </label>
-                `;
+            const titleDiv = document.createElement('div');
+            titleDiv.className = 'box-title';
+            titleDiv.innerHTML = `<strong>${caja.nombre}</strong>`;
+            
+            const btnToggle = document.createElement('button');
+            btnToggle.className = 'btn-toggle';
+            btnToggle.innerText = 'Abrir';
+            
+            titleDiv.appendChild(btnToggle);
+            card.appendChild(titleDiv);
+
+            const lista = document.createElement('div');
+            lista.className = 'item-list';
+            lista.id = 'list-' + caja.id;
+
+            btnToggle.addEventListener('click', () => {
+                lista.classList.toggle('active');
+                if (lista.classList.contains('active')) {
+                    btnToggle.innerText = 'Cerrar';
+                    btnToggle.style.background = '#e0e7ff';
+                } else {
+                    btnToggle.innerText = 'Abrir';
+                    btnToggle.style.background = '#f4f4f9';
+                }
             });
 
-            card.innerHTML = `
-                <div class="box-title">
-                    <strong>${caja.nombre}</strong>
-                    <button class="btn-toggle" onclick="toggleItems('${caja.id}')">Abrir</button>
-                </div>
-                <div class="item-list" id="list-${caja.id}">
-                    ${itemsHTML}
-                </div>
-            `;
-            app.appendChild(card);
+            caja.items.forEach(item => {
+                const label = document.createElement('label');
+                label.className = 'item';
+                
+                const checkbox = document.createElement('input');
+                checkbox.type = 'checkbox';
+                checkbox.id = item.id;
+                
+                // EVENTO IMPORTANTE: Al marcar, se envía a Firebase
+                checkbox.addEventListener('change', (e) => {
+                    set(ref(db, 'inventario/' + item.id), e.target.checked);
+                });
+
+                const spanText = document.createElement('span');
+                spanText.className = 'item-text';
+                spanText.innerText = item.nombre;
+
+                const spanQty = document.createElement('span');
+                spanQty.className = 'qty';
+                spanQty.innerText = 'x' + item.qty;
+
+                label.appendChild(checkbox);
+                label.appendChild(spanText);
+                label.appendChild(spanQty);
+                lista.appendChild(label);
+            });
+
+            card.appendChild(lista);
+            appDiv.appendChild(card);
         });
 
-        // Función para expandir/contraer
-        function toggleItems(id) {
-            const lista = document.getElementById('list-' + id);
-            const boton = lista.previousElementSibling.querySelector('.btn-toggle');
-            
-            lista.classList.toggle('active');
-            
-            if (lista.classList.contains('active')) {
-                boton.innerText = 'Cerrar';
-                boton.style.background = '#e0e7ff';
-            } else {
-                boton.innerText = 'Abrir';
-                boton.style.background = '#f4f4f9';
-            }
-        }
-
-        // Función para guardar el estado del checkbox en la memoria del navegador
-        function guardarEstado(itemId) {
-            const checkbox = document.getElementById(itemId);
-            localStorage.setItem(itemId, checkbox.checked);
-        }
-
-        // Función para desmarcar todo al empezar o terminar un evento
-        function resetearInventario() {
-            if(confirm('¿Seguro que quieres desmarcar todo el material?')) {
-                const checkboxes = document.querySelectorAll('input[type="checkbox"]');
-                checkboxes.forEach(cb => {
-                    cb.checked = false;
-                    localStorage.setItem(cb.id, 'false');
+        // ESCUCHA EN TIEMPO REAL: Se actualiza solo al recibir datos de la nube
+        const inventarioRef = ref(db, 'inventario');
+        onValue(inventarioRef, (snapshot) => {
+            const data = snapshot.val();
+            if (data) {
+                // Actualiza cada casilla basándose en lo que dice Firebase
+                Object.keys(data).forEach(itemId => {
+                    const cb = document.getElementById(itemId);
+                    if (cb) {
+                        cb.checked = data[itemId];
+                    }
                 });
             }
-        }
+        });
+
+        // Botón limpiar (pone todo a false en la base de datos)
+        document.getElementById('btn-reset').addEventListener('click', () => {
+            if(confirm('¿Seguro que quieres desmarcar todo el material en TODOS los dispositivos?')) {
+                const updates = {};
+                document.querySelectorAll('input[type="checkbox"]').forEach(cb => {
+                    updates[cb.id] = false;
+                });
+                update(ref(db, 'inventario'), updates);
+            }
+        });
     </script>
 </body>
 </html>
