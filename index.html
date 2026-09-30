@@ -44,9 +44,37 @@
             color: #333; 
             display: flex; 
             justify-content: space-between; 
+            align-items: flex-start;
+            gap: 10px;
+        }
+        .box-header-info {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+            flex-grow: 1;
+        }
+        .box-header-top {
+            display: flex;
             align-items: center;
             gap: 10px;
         }
+        .checkbox-viaje {
+            font-size: 0.9rem;
+            color: #475569;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            background: #f8fafc;
+            padding: 6px 10px;
+            border-radius: 6px;
+            border: 1px solid #e2e8f0;
+        }
+        .checkbox-viaje input {
+            width: 18px;
+            height: 18px;
+            accent-color: #1e3a8a;
+        }
+
         .item-list { 
             list-style: none; 
             padding: 0; 
@@ -108,7 +136,6 @@
             color: #333;
         }
         
-        /* Estilo cuando está completo (todos usados) */
         .item.completed .item-text {
             text-decoration: line-through;
             color: #94a3b8;
@@ -131,14 +158,13 @@
             color: #333; 
             font-weight: 600; 
             cursor: pointer;
+            height: fit-content;
         }
         
-        /* Botones de Cabecera */
         .btn-header { border: none; padding: 8px 12px; border-radius: 6px; font-size: 0.9rem; font-weight: bold; cursor: pointer; }
         .btn-reset { background: #ef4444; color: white; }
         .btn-edit-mode { background: white; color: #1e3a8a; }
 
-        /* Controles de Edición */
         .btn-del { background: #ef4444; color: white; border: none; padding: 8px 12px; border-radius: 6px; margin-right: 10px; cursor: pointer; font-size: 1rem; }
         .btn-add-item { display: block; width: 100%; padding: 12px; margin-top: 10px; border: 2px dashed #cbd5e1; background: transparent; color: #64748b; border-radius: 6px; font-weight: bold; cursor: pointer; }
         .btn-add-caja { display: block; width: 100%; padding: 14px; margin-top: 20px; border: none; background: #3b82f6; color: white; border-radius: 8px; font-weight: bold; font-size: 1.1rem; cursor: pointer; box-shadow: 0 4px 6px rgba(59, 130, 246, 0.3); }
@@ -175,42 +201,43 @@
         const db = getDatabase(appFirebase);
 
         let inventario = [];
-        let estadoItems = {}; // Ahora guardará números, ej: { "tv32": 2 }
+        let estadoItems = {}; // Cantidades extraídas
+        let estadoCajas = {}; // Cajas que viajan al campeonato (true/false)
         let isEditMode = false;
         let cajasAbiertas = {};
-
-        const inventarioDefault = [
-            {
-                id: "c1", nombre: "Caja 1: Pantallas y Control", color: "#3b82f6",
-                items: [{ id: "tv32", nombre: "Televisiones 32\"", qty: "4" }, { id: "sop", nombre: "Soportes de mesa", qty: "4" }]
-            }
-        ];
 
         const appDiv = document.getElementById('app');
         const btnEdit = document.getElementById('btn-edit');
 
         btnEdit.addEventListener('click', () => {
             isEditMode = !isEditMode;
-            btnEdit.innerText = isEditMode ? '👁️ Ver Normal' : '✏️ Editar';
+            btnEdit.innerText = isEditMode ? '👁️ Ver Evento' : '✏️️ Preparar';
             btnEdit.style.background = isEditMode ? '#eab308' : 'white';
             btnEdit.style.color = isEditMode ? 'black' : '#1e3a8a';
             renderDOM();
         });
 
+        // Escuchar estructura
         onValue(ref(db, 'estructura'), (snapshot) => {
             const data = snapshot.val();
             if (data) {
                 inventario = data.map(c => ({...c, items: c.items || []}));
             } else {
-                inventario = inventarioDefault;
-                set(ref(db, 'estructura'), inventario); 
+                inventario = [];
             }
             renderDOM();
         });
 
+        // Escuchar cantidades de material
         onValue(ref(db, 'estado'), (snapshot) => {
             estadoItems = snapshot.val() || {};
-            renderDOM(); // Volvemos a renderizar para actualizar los números
+            renderDOM();
+        });
+
+        // Escuchar qué cajas se llevan al evento
+        onValue(ref(db, 'estadoCajas'), (snapshot) => {
+            estadoCajas = snapshot.val() || {};
+            renderDOM();
         });
 
         // --- FUNCIONES GLOBALES ---
@@ -220,7 +247,10 @@
             renderDOM();
         };
 
-        // NUEVA FUNCIÓN: Suma o resta y lo envía a Firebase
+        window.toggleCajaViaje = function(cajaId, isChecked) {
+            set(ref(db, 'estadoCajas/' + cajaId), isChecked);
+        };
+
         window.cambiarCantidad = function(itemId, delta, maxQty) {
             let actual = estadoItems[itemId] || 0;
             let nuevo = actual + delta;
@@ -228,37 +258,41 @@
             if (nuevo < 0) nuevo = 0;
             if (nuevo > maxQty) nuevo = maxQty;
             
-            // Si llega a 0 lo borramos de la DB para limpiar, sino guardamos el número
             set(ref(db, 'estado/' + itemId), nuevo > 0 ? nuevo : null);
         };
 
         document.getElementById('btn-reset').addEventListener('click', () => {
-            if(confirm('¿Seguro que quieres poner todos los contadores a 0 en TODOS los dispositivos?')) {
+            if(confirm('¿Seguro que quieres poner los contadores de material a 0? (Esto no borrará tus cajas seleccionadas)')) {
                 set(ref(db, 'estado'), null); 
             }
         });
 
         window.addCaja = function() {
-            const nombre = prompt('Nombre de la nueva caja (Ej: Caja 4: Herramientas):');
+            const nombre = prompt('Nombre de la nueva caja:');
             if(!nombre) return;
             const color = '#' + Math.floor(Math.random()*16777215).toString(16).padStart(6, '0');
-            const nuevaCaja = { id: 'c' + Date.now(), nombre: nombre, color: color, items: [] };
+            const cajaId = 'c' + Date.now();
+            const nuevaCaja = { id: cajaId, nombre: nombre, color: color, items: [] };
             inventario.push(nuevaCaja);
-            cajasAbiertas[nuevaCaja.id] = true;
+            cajasAbiertas[cajaId] = true;
+            
+            // Por defecto, al crear una caja, marcamos que se usa
+            set(ref(db, 'estadoCajas/' + cajaId), true);
             set(ref(db, 'estructura'), inventario);
         };
 
         window.borrarCaja = function(cajaId) {
-            if(confirm('¿Borrar caja y todo su contenido?')) {
+            if(confirm('¿Borrar caja y todo su contenido para siempre?')) {
                 inventario = inventario.filter(c => c.id !== cajaId);
                 set(ref(db, 'estructura'), inventario);
+                set(ref(db, 'estadoCajas/' + cajaId), null);
             }
         };
 
         window.addItem = function(cajaId) {
-            const nombre = prompt('Nombre del material (Ej: Cinta Americana):');
+            const nombre = prompt('Nombre del material:');
             if(!nombre) return;
-            const qty = prompt('Cantidad total de este material en la caja:', '1');
+            const qty = prompt('Cantidad total en la caja:', '1');
             if(!qty) return;
 
             const caja = inventario.find(c => c.id === cajaId);
@@ -271,7 +305,7 @@
                 const caja = inventario.find(c => c.id === cajaId);
                 caja.items = caja.items.filter(i => i.id !== itemId);
                 set(ref(db, 'estructura'), inventario);
-                set(ref(db, 'estado/' + itemId), null); // Limpiamos su estado también
+                set(ref(db, 'estado/' + itemId), null);
             }
         };
 
@@ -281,6 +315,14 @@
             appDiv.innerHTML = '';
             
             inventario.forEach(caja => {
+                // Comprobar si la caja viaja a este campeonato (si no está definida, asumimos true por defecto)
+                const isActiva = estadoCajas[caja.id] !== false;
+
+                // Si NO estamos en modo edición y la caja no viaja, nos la saltamos y no la dibujamos
+                if (!isEditMode && !isActiva) {
+                    return; 
+                }
+
                 const card = document.createElement('div');
                 card.className = 'box-card';
                 card.style.borderLeftColor = caja.color;
@@ -302,7 +344,6 @@
                             <span class="qty">Total: ${maxQty}</span>
                         </div>`;
                     } else {
-                        // Lógica visual para los botones
                         const disableMinus = currentQty <= 0 ? 'disabled' : '';
                         const disablePlus = currentQty >= maxQty ? 'disabled' : '';
                         const isCompleted = currentQty >= maxQty ? 'completed' : '';
@@ -324,9 +365,23 @@
                     itemsHTML += `<button class="btn-add-item" onclick="addItem('${caja.id}')">+ Añadir material a esta caja</button>`;
                 }
 
-                let cajaTitleHTML = `<strong style="flex-grow:1;">${caja.nombre}</strong>`;
+                // Header de la caja adaptado según el modo
+                let cajaTitleHTML = '';
                 if(isEditMode) {
-                    cajaTitleHTML = `<button class="btn-del" onclick="borrarCaja('${caja.id}')">🗑️ Borrar</button> <strong style="flex-grow:1;">${caja.nombre}</strong>`;
+                    cajaTitleHTML = `
+                        <div class="box-header-info">
+                            <div class="box-header-top">
+                                <button class="btn-del" onclick="borrarCaja('${caja.id}')">🗑️</button> 
+                                <strong style="font-size: 1.1rem;">${caja.nombre}</strong>
+                            </div>
+                            <label class="checkbox-viaje">
+                                <input type="checkbox" ${isActiva ? 'checked' : ''} onchange="toggleCajaViaje('${caja.id}', this.checked)">
+                                Llevar a este campeonato
+                            </label>
+                        </div>
+                    `;
+                } else {
+                    cajaTitleHTML = `<div class="box-header-info"><strong style="font-size: 1.2rem;">${caja.nombre}</strong></div>`;
                 }
 
                 card.innerHTML = `
