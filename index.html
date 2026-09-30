@@ -21,6 +21,9 @@
             justify-content: space-between;
             align-items: center;
             box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            position: sticky;
+            top: 0;
+            z-index: 100;
         }
         .header-buttons {
             display: flex;
@@ -62,33 +65,63 @@
             padding: 12px 0; 
             border-bottom: 1px solid #f9f9f9; 
             color: #555;
-            cursor: pointer;
         }
         .item:last-child { border-bottom: none; }
         
-        .item input[type="checkbox"] {
-            width: 22px;
-            height: 22px;
-            margin-right: 15px;
-            accent-color: #1e3a8a;
-            cursor: pointer;
-        }
         .item-text {
             flex-grow: 1;
             transition: all 0.2s;
+            line-height: 1.2;
         }
-        .item input[type="checkbox"]:checked + .item-text {
+        
+        /* Controles del contador para móvil */
+        .qty-controls {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-right: 15px;
+            background: #f1f5f9;
+            padding: 4px;
+            border-radius: 8px;
+        }
+        .btn-qty {
+            background: white;
+            border: 1px solid #cbd5e1;
+            width: 32px;
+            height: 32px;
+            border-radius: 6px;
+            font-size: 1.2rem;
+            color: #1e3a8a;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            cursor: pointer;
+            box-shadow: 0 1px 2px rgba(0,0,0,0.05);
+        }
+        .btn-qty:active { background: #e2e8f0; }
+        .btn-qty.disabled { opacity: 0.4; pointer-events: none; }
+        .qty-current {
+            font-weight: bold;
+            font-size: 1.1rem;
+            width: 24px;
+            text-align: center;
+            color: #333;
+        }
+        
+        /* Estilo cuando está completo (todos usados) */
+        .item.completed .item-text {
             text-decoration: line-through;
-            color: #999;
+            color: #94a3b8;
         }
         
         .qty { 
             font-weight: bold; 
-            color: #1e3a8a; 
-            background: #e0e7ff; 
-            padding: 3px 10px; 
+            color: #64748b; 
+            background: #f1f5f9; 
+            padding: 3px 8px; 
             border-radius: 12px;
-            font-size: 0.9rem;
+            font-size: 0.85rem;
+            white-space: nowrap;
         }
         .btn-toggle { 
             background: #f4f4f9; 
@@ -101,27 +134,14 @@
         }
         
         /* Botones de Cabecera */
-        .btn-header {
-            border: none;
-            padding: 8px 12px;
-            border-radius: 6px;
-            font-size: 0.9rem;
-            font-weight: bold;
-            cursor: pointer;
-        }
+        .btn-header { border: none; padding: 8px 12px; border-radius: 6px; font-size: 0.9rem; font-weight: bold; cursor: pointer; }
         .btn-reset { background: #ef4444; color: white; }
         .btn-edit-mode { background: white; color: #1e3a8a; }
 
         /* Controles de Edición */
-        .btn-del {
-            background: #ef4444; color: white; border: none; padding: 6px 10px; border-radius: 4px; margin-right: 10px; cursor: pointer; font-size: 0.8rem;
-        }
-        .btn-add-item {
-            display: block; width: 100%; padding: 10px; margin-top: 10px; border: 2px dashed #cbd5e1; background: transparent; color: #64748b; border-radius: 6px; font-weight: bold; cursor: pointer;
-        }
-        .btn-add-caja {
-            display: block; width: 100%; padding: 14px; margin-top: 20px; border: none; background: #3b82f6; color: white; border-radius: 8px; font-weight: bold; font-size: 1.1rem; cursor: pointer; box-shadow: 0 4px 6px rgba(59, 130, 246, 0.3);
-        }
+        .btn-del { background: #ef4444; color: white; border: none; padding: 8px 12px; border-radius: 6px; margin-right: 10px; cursor: pointer; font-size: 1rem; }
+        .btn-add-item { display: block; width: 100%; padding: 12px; margin-top: 10px; border: 2px dashed #cbd5e1; background: transparent; color: #64748b; border-radius: 6px; font-weight: bold; cursor: pointer; }
+        .btn-add-caja { display: block; width: 100%; padding: 14px; margin-top: 20px; border: none; background: #3b82f6; color: white; border-radius: 8px; font-weight: bold; font-size: 1.1rem; cursor: pointer; box-shadow: 0 4px 6px rgba(59, 130, 246, 0.3); }
     </style>
 </head>
 <body>
@@ -129,7 +149,7 @@
         <h1 style="margin: 0; font-size: 1.2rem;">📦 Material</h1>
         <div class="header-buttons">
             <button id="btn-edit" class="btn-header btn-edit-mode">✏️ Editar</button>
-            <button id="btn-reset" class="btn-header btn-reset">Limpiar</button>
+            <button id="btn-reset" class="btn-header btn-reset">Limpiar a 0</button>
         </div>
     </header>
     <div class="container" id="app">Cargando datos...</div>
@@ -155,11 +175,10 @@
         const db = getDatabase(appFirebase);
 
         let inventario = [];
-        let estadoItems = {};
+        let estadoItems = {}; // Ahora guardará números, ej: { "tv32": 2 }
         let isEditMode = false;
-        let cajasAbiertas = {}; // Para recordar qué cajas están desplegadas
+        let cajasAbiertas = {};
 
-        // Material por defecto si la base de datos está vacía la primera vez
         const inventarioDefault = [
             {
                 id: "c1", nombre: "Caja 1: Pantallas y Control", color: "#3b82f6",
@@ -170,7 +189,6 @@
         const appDiv = document.getElementById('app');
         const btnEdit = document.getElementById('btn-edit');
 
-        // Alternar Modo Edición
         btnEdit.addEventListener('click', () => {
             isEditMode = !isEditMode;
             btnEdit.innerText = isEditMode ? '👁️ Ver Normal' : '✏️ Editar';
@@ -179,52 +197,50 @@
             renderDOM();
         });
 
-        // 1. Escuchar la ESTRUCTURA del inventario
         onValue(ref(db, 'estructura'), (snapshot) => {
             const data = snapshot.val();
             if (data) {
-                // Aseguramos de que Firebase no elimine los arrays vacíos (comportamiento por defecto)
                 inventario = data.map(c => ({...c, items: c.items || []}));
             } else {
                 inventario = inventarioDefault;
-                set(ref(db, 'estructura'), inventario); // Guardar por primera vez
+                set(ref(db, 'estructura'), inventario); 
             }
             renderDOM();
         });
 
-        // 2. Escuchar el ESTADO de los checkboxes
         onValue(ref(db, 'estado'), (snapshot) => {
             estadoItems = snapshot.val() || {};
-            // Desmarcamos todos los checks visuales
-            document.querySelectorAll('input[type="checkbox"]').forEach(cb => cb.checked = false);
-            // Marcamos solo los que vengan como true desde Firebase
-            Object.keys(estadoItems).forEach(itemId => {
-                const cb = document.getElementById('cb-' + itemId);
-                if (cb) cb.checked = estadoItems[itemId];
-            });
+            renderDOM(); // Volvemos a renderizar para actualizar los números
         });
 
-        // --- FUNCIONES GLOBALES PARA EL HTML ---
+        // --- FUNCIONES GLOBALES ---
         
         window.toggleItems = function(id) {
             cajasAbiertas[id] = !cajasAbiertas[id];
             renderDOM();
         };
 
-        window.guardarCheckbox = function(itemId, checked) {
-            set(ref(db, 'estado/' + itemId), checked ? true : null);
+        // NUEVA FUNCIÓN: Suma o resta y lo envía a Firebase
+        window.cambiarCantidad = function(itemId, delta, maxQty) {
+            let actual = estadoItems[itemId] || 0;
+            let nuevo = actual + delta;
+            
+            if (nuevo < 0) nuevo = 0;
+            if (nuevo > maxQty) nuevo = maxQty;
+            
+            // Si llega a 0 lo borramos de la DB para limpiar, sino guardamos el número
+            set(ref(db, 'estado/' + itemId), nuevo > 0 ? nuevo : null);
         };
 
         document.getElementById('btn-reset').addEventListener('click', () => {
-            if(confirm('¿Seguro que quieres desmarcar todo el material en TODOS los dispositivos?')) {
-                set(ref(db, 'estado'), null); // Borra todos los checks de la base de datos
+            if(confirm('¿Seguro que quieres poner todos los contadores a 0 en TODOS los dispositivos?')) {
+                set(ref(db, 'estado'), null); 
             }
         });
 
         window.addCaja = function() {
             const nombre = prompt('Nombre de la nueva caja (Ej: Caja 4: Herramientas):');
             if(!nombre) return;
-            // Color aleatorio para la etiqueta
             const color = '#' + Math.floor(Math.random()*16777215).toString(16).padStart(6, '0');
             const nuevaCaja = { id: 'c' + Date.now(), nombre: nombre, color: color, items: [] };
             inventario.push(nuevaCaja);
@@ -242,11 +258,11 @@
         window.addItem = function(cajaId) {
             const nombre = prompt('Nombre del material (Ej: Cinta Americana):');
             if(!nombre) return;
-            const qty = prompt('Cantidad total que debe haber:', '1');
+            const qty = prompt('Cantidad total de este material en la caja:', '1');
             if(!qty) return;
 
             const caja = inventario.find(c => c.id === cajaId);
-            caja.items.push({ id: 'i' + Date.now(), nombre: nombre, qty: qty });
+            caja.items.push({ id: 'i' + Date.now(), nombre: nombre, qty: parseInt(qty) });
             set(ref(db, 'estructura'), inventario);
         };
 
@@ -255,11 +271,13 @@
                 const caja = inventario.find(c => c.id === cajaId);
                 caja.items = caja.items.filter(i => i.id !== itemId);
                 set(ref(db, 'estructura'), inventario);
+                set(ref(db, 'estado/' + itemId), null); // Limpiamos su estado también
             }
         };
 
-        // --- RENDERIZADO DE LA INTERFAZ ---
+        // --- RENDERIZADO ---
         function renderDOM() {
+            if(!appDiv) return;
             appDiv.innerHTML = '';
             
             inventario.forEach(caja => {
@@ -273,21 +291,32 @@
 
                 let itemsHTML = '';
                 caja.items.forEach(item => {
-                    const isChecked = estadoItems[item.id] ? 'checked' : '';
+                    const maxQty = parseInt(item.qty) || 1;
+                    const currentQty = estadoItems[item.id] || 0;
+                    
                     if (isEditMode) {
                         itemsHTML += `
                         <div class="item">
                             <button class="btn-del" onclick="borrarItem('${caja.id}', '${item.id}')">🗑️</button>
                             <span class="item-text">${item.nombre}</span>
-                            <span class="qty">x${item.qty}</span>
+                            <span class="qty">Total: ${maxQty}</span>
                         </div>`;
                     } else {
+                        // Lógica visual para los botones
+                        const disableMinus = currentQty <= 0 ? 'disabled' : '';
+                        const disablePlus = currentQty >= maxQty ? 'disabled' : '';
+                        const isCompleted = currentQty >= maxQty ? 'completed' : '';
+
                         itemsHTML += `
-                        <label class="item">
-                            <input type="checkbox" id="cb-${item.id}" ${isChecked} onchange="guardarCheckbox('${item.id}', this.checked)">
+                        <div class="item ${isCompleted}">
+                            <div class="qty-controls">
+                                <button class="btn-qty ${disableMinus}" onclick="cambiarCantidad('${item.id}', -1, ${maxQty})">-</button>
+                                <span class="qty-current">${currentQty}</span>
+                                <button class="btn-qty ${disablePlus}" onclick="cambiarCantidad('${item.id}', 1, ${maxQty})">+</button>
+                            </div>
                             <span class="item-text">${item.nombre}</span>
-                            <span class="qty">x${item.qty}</span>
-                        </label>`;
+                            <span class="qty">de ${maxQty}</span>
+                        </div>`;
                     }
                 });
 
@@ -297,7 +326,7 @@
 
                 let cajaTitleHTML = `<strong style="flex-grow:1;">${caja.nombre}</strong>`;
                 if(isEditMode) {
-                    cajaTitleHTML = `<button class="btn-del" onclick="borrarCaja('${caja.id}')">🗑️ Borrar Caja</button> <strong style="flex-grow:1;">${caja.nombre}</strong>`;
+                    cajaTitleHTML = `<button class="btn-del" onclick="borrarCaja('${caja.id}')">🗑️ Borrar</button> <strong style="flex-grow:1;">${caja.nombre}</strong>`;
                 }
 
                 card.innerHTML = `
